@@ -548,7 +548,7 @@ function onPower(){
 
 function doCmd(name, pin, modeNum) {
   if (!sysOn) return;
-  if (curMode === modeNum) return;  // กด mode เดิม → ไม่ทำอะไร
+  if (curMode === modeNum) return;
   manOn = false; curMode = modeNum;
   setModeBadge(modeNum);
   refreshButtons();
@@ -556,8 +556,14 @@ function doCmd(name, pin, modeNum) {
   bSet(pin,1); setTimeout(()=>bSet(pin,0),300);
 
   startWithDelay((now) => {
-    if (modeNum === 1) { masterStart = now; }
-    if (modeNum === 2) { pairState=0; pairMillis=now; setLights(2,0,2,0); }
+    if (modeNum === 1) {
+      masterStart = now;
+      bSet(13, masterStart);  // sync timer ให้ทุกเครื่อง
+    }
+    if (modeNum === 2) {
+      pairState=0; pairMillis=now; setLights(2,0,2,0);
+      bSet(14, '0,0');  // pairState=0, offset=0ms
+    }
     if (modeNum === 3) { scMainActive=true; scPrev=now; setLights(2,0,2,0); }
     if (modeNum === 5) { allRed(); }
   });
@@ -576,13 +582,13 @@ function doEnterManual(){
 
 function doLane(pin, laneIdx){
   if (!sysOn || !manOn) return;
-  if (manCurLane === laneIdx && !manInTrans) return;  // เลนเดิมที่เขียวอยู่แล้ว → ไม่ทำอะไร
-  // highlight ปุ่ม
+  if (manCurLane === laneIdx && !manInTrans) return;
   document.querySelectorAll('.act').forEach(e=>e.classList.remove('act'));
   document.getElementById('btn-2')?.classList.add('act');
   document.getElementById('btn-'+pin)?.classList.add('act');
   toast('Lane '+LNAMES[laneIdx]+' activated','ok');
   bSet(pin,1); setTimeout(()=>bSet(pin,0),300);
+  bSet(15, laneIdx);  // sync เลนที่เลือกให้ทุกเครื่อง
   requestLane(laneIdx);
 }
 
@@ -591,52 +597,96 @@ function doLane(pin, laneIdx){
 // ══════════════════════════════════════════════════════
 let syncing = false, lastV4=null, lastV11=null;
 
+// ══════════════════════════════════════════════════════
+//  REALTIME SYNC  — ใช้ Blynk เป็นตัวกลาง sync ทุกเครื่อง
+//  V4  = power on/off
+//  V11 = mode (0-5)
+//  V13 = masterStart timestamp (Unix ms) — sync timer ทุกเครื่อง
+//  V14 = pairState + pairMillis offset  "pairState,offset"
+//  V15 = manCurLane
+// ══════════════════════════════════════════════════════
+let lastV13=null, lastV14=null, lastV15=null;
+
 async function sync(){
   if(syncing) return; syncing=true;
   try{
-    const [r4,r11] = await Promise.all([bGet(4),bGet(11)]);
+    const [r4,r11,r13,r14,r15] = await Promise.all([
+      bGet(4),bGet(11),bGet(13),bGet(14),bGet(15)
+    ]);
     if(r4===null){setConn(false);return;}
     setConn(true);
     const t=new Date().toLocaleTimeString('th-TH');
     document.getElementById('ctime').textContent=t;
     document.getElementById('ctime2').textContent=t;
 
-    // power
+    // ── power ──
     const serverOn=(r4==='1'||r4===1);
     if(serverOn!==sysOn && r4!==lastV4){
-      lastV4=r4;
-      sysOn=serverOn;
+      lastV4=r4; sysOn=serverOn;
       if(!sysOn){manOn=false;curMode=0;initPending=null;dimAll();}
       setPowerUI(sysOn); setModeBadge(sysOn?curMode:0); refreshButtons(); hdrAnim(sysOn);
     }
 
-    // mode — ถ้า server เปลี่ยน mode จาก Blynk app อื่น ให้ sync ด้วย
+    // ── mode ──
     const m=parseInt(r11??'0',10);
-    if(r11!==lastV11 && sysOn){
-      lastV11=r11;
-      if(m!==curMode){
-        // mode เปลี่ยนจากภายนอก → รีเซ็ต sim
-        const modeMap={1:'AUTO_NORMAL',2:'AUTO_PAIR',3:'SMART_CITY',4:'MANUAL',5:'STOP'};
-        if(m===4){doEnterManual_silent();}
-        else if(m>=1&&m<=5){doCmd_silent(m);}
+    const modeChanged = r11!==lastV11 && sysOn;
+    if(modeChanged){ lastV11=r11; }
+
+    // ── masterStart (V13) — Auto Normal timer sync ──
+    if(r13 && r13!==lastV13){
+      lastV13=r13;
+      const serverStart=parseInt(r13,10);
+      if(!isNaN(serverStart) && serverStart>0){
+        // แปลง server Unix timestamp → local Date.now() offset
+        masterStart = Date.now() - (Date.now() - serverStart);
+        // ตรงๆ คือ masterStart = serverStart (เพราะทั้งคู่ใช้ Date.now())
+        masterStart = serverStart;
       }
     }
+
+    // ── pairState+offset (V14) — Auto Pair sync ──
+    if(r14 && r14!==lastV14 && m===2){
+      lastV14=r14;
+      const parts=r14.split(',');
+      if(parts.length===2){
+        pairState=parseInt(parts[0],10);
+        const offset=parseInt(parts[1],10);
+        pairMillis=Date.now()-offset;
+      }
+    }
+
+    // ── manCurLane (V15) — Manual sync ──
+    if(r15 && r15!==lastV15 && m===4){
+      lastV15=r15;
+      const lane=parseInt(r15,10);
+      if(lane>=0&&lane<=3&&lane!==manCurLane&&!manInTrans){
+        manCurLane=lane; allRed(); lights[lane]=2; renderAll();
+      }
+    }
+
+    // ── apply mode change ──
+    if(modeChanged && m!==curMode){
+      if(m===4){applyManual_silent();}
+      else if(m>=1&&m<=5){applyMode_silent(m);}
+    }
+
   }finally{syncing=false;}
 }
 
-// silent version (ไม่ส่ง Blynk กลับ ไม่ toast)
-function doCmd_silent(modeNum){
+// apply mode โดยไม่ส่ง Blynk กลับ (ใช้ timer จาก V13/V14 ที่ sync มาแล้ว)
+function applyMode_silent(modeNum){
   manOn=false; curMode=modeNum; setModeBadge(modeNum); refreshButtons();
-  startWithDelay((now)=>{
-    if(modeNum===1){masterStart=now;}
-    if(modeNum===2){pairState=0;pairMillis=now;setLights(2,0,2,0);}
-    if(modeNum===3){scMainActive=true;scPrev=now;setLights(2,0,2,0);}
-    if(modeNum===5){allRed();}
-  });
+  initPending=null;
+  if(modeNum===1){ /* masterStart sync มาจาก V13 แล้ว */ }
+  if(modeNum===2){ /* pairState/pairMillis sync มาจาก V14 แล้ว */ }
+  if(modeNum===3){ scMainActive=true; scPrev=Date.now(); }
+  if(modeNum===5){ allRed(); renderAll(); }
 }
-function doEnterManual_silent(){
-  manOn=true;curMode=4;setModeBadge(4);refreshButtons();
-  startWithDelay((now)=>{startManual();});
+function applyManual_silent(){
+  manOn=true; curMode=4; setModeBadge(4); refreshButtons();
+  initPending=null;
+  // manCurLane sync มาจาก V15 แล้ว
+  allRed(); if(manCurLane>=0) lights[manCurLane]=2; renderAll();
 }
 
 // ── START ──
