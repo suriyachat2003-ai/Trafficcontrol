@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Traffic Control System</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --red:#dc2626;--red-l:#fee2e2;--red-m:#f87171;
+  --yellow:#b45309;--yellow-l:#fef3c7;--yellow-m:#fbbf24;
+  --green:#047857;--green-l:#d1fae5;--green-m:#34d399;
+  --bg:#e2e8f2;--surface:#ffffff;--surface2:#edf1f7;
+  --border:#8896ae;--border2:#6b7a93;
+  --text:#0a0f1a;--text2:#1e2a3a;--text3:#4a5568;
+  --sh:0 1px 4px rgba(0,0,0,.14),0 1px 2px rgba(0,0,0,.1);
+  --sh2:0 4px 10px rgba(0,0,0,.15),0 2px 4px rgba(0,0,0,.1);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh}
+.wrap{max-width:1040px;margin:0 auto;padding:24px 20px 48px}
+/* HEADER */
+.hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px}
+.brand{display:flex;align-items:center;gap:12px}
+.tl-mini{display:flex;flex-direction:column;gap:5px;background:#1e293b;padding:9px 11px;border-radius:10px}
+.td{width:13px;height:13px;border-radius:50%;background:#334155;transition:all .35s}
+.td.r{background:#ef4444;box-shadow:0 0 8px #ef4444cc}
+.td.y{background:#f59e0b;box-shadow:0 0 8px #f59e0bcc}
+.td.g{background:#10b981;box-shadow:0 0 8px #10b981cc}
+.brand h1{font-size:20px;font-weight:700}
+.brand p{font-size:12px;color:var(--text3);font-family:'DM Mono',monospace}
+.conn{display:flex;align-items:center;gap:6px;font-size:12px;font-family:'DM Mono',monospace;color:var(--text3)}
+.cdot{width:7px;height:7px;border-radius:50%;background:var(--text3);transition:all .3s}
+.cdot.on{background:#10b981;box-shadow:0 0 0 3px #10b98122}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.5}}
+/* POWER */
+.pcard{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px 20px;margin-bottom:16px;display:flex;align-items:center;gap:14px;box-shadow:var(--sh)}
+.picon{width:38px;height:38px;border-radius:10px;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:17px}
+.pinfo{flex:1}.pinfo h3{font-size:14px;font-weight:600}
+.pinfo p{font-size:12px;color:var(--text3);font-family:'DM Mono',monospace;margin-top:2px}
+.tog{position:relative;width:52px;height:28px;flex-shrink:0;cursor:pointer}
+.tog input{opacity:0;width:0;height:0;position:absolute}
+.tog-track{position:absolute;inset:0;border-radius:14px;background:#cbd5e1;transition:background .25s}
+.tog-track::after{content:'';position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;transition:transform .25s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.tog input:checked+.tog-track{background:var(--green)}
+.tog input:checked+.tog-track::after{transform:translateX(24px)}
+.pbadge{font-size:12px;font-family:'DM Mono',monospace;font-weight:500;padding:4px 10px;border-radius:6px;background:var(--surface2);color:var(--text3);border:1px solid var(--border);transition:all .25s}
+.pbadge.on{background:var(--green-l);color:var(--green);border-color:var(--green-m)}
+/* STATUS */
+.srow{display:flex;gap:12px;margin-bottom:20px}
+.sbadge{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 16px;display:flex;align-items:center;gap:10px;flex:1;box-shadow:var(--sh);transition:border-color .3s}
+.sbadge-dot{width:8px;height:8px;border-radius:50%;background:var(--text3);flex-shrink:0}
+.sbadge-lbl{font-size:10px;font-family:'DM Mono',monospace;color:var(--text3);letter-spacing:.5px;text-transform:uppercase}
+.sbadge-val{font-size:13px;font-weight:600;margin-top:2px}
+.sbadge.cg{border-color:var(--green-m)}.sbadge.cg .sbadge-dot{background:var(--green);animation:blink 2s infinite}.sbadge.cg .sbadge-val{color:var(--green)}
+.sbadge.cy{border-color:var(--yellow-m)}.sbadge.cy .sbadge-dot{background:var(--yellow);animation:blink 2s infinite}.sbadge.cy .sbadge-val{color:var(--yellow)}
+.sbadge.cr{border-color:var(--red-m)}.sbadge.cr .sbadge-dot{background:var(--red)}.sbadge.cr .sbadge-val{color:var(--red)}
+/* LANES */
+.lanes{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+.lcard{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px 12px;display:flex;flex-direction:column;align-items:center;gap:10px;box-shadow:var(--sh);transition:border-color .3s,box-shadow .3s,background .3s}
+.lcard.ag{border-color:var(--green-m);box-shadow:0 0 0 1px var(--green-m),var(--sh)}
+.lcard.ay{border-color:var(--yellow-m);box-shadow:0 0 0 1px var(--yellow-m),var(--sh)}
+.ltitle{font-size:11px;font-family:'DM Mono',monospace;color:var(--text3);letter-spacing:1px}
+.lhouse{background:#1e293b;border-radius:12px;padding:10px 8px;display:flex;flex-direction:column;gap:7px;box-shadow:inset 0 2px 4px rgba(0,0,0,.3)}
+.bulb{width:32px;height:32px;border-radius:50%;transition:all .4s}
+.bulb.rd{background:#4a1515}
+.bulb.yd{background:#3d2e00}
+.bulb.gd{background:#003d1a}
+.bulb.ron{background:#ef4444;box-shadow:0 0 16px #ef4444,0 0 32px #ef444455}
+.bulb.yon{background:#f59e0b;box-shadow:0 0 16px #f59e0b,0 0 32px #f59e0b55}
+.bulb.gon{background:#10b981;box-shadow:0 0 16px #10b981,0 0 32px #10b98155}
+.lname{font-size:16px;font-weight:700;transition:color .3s}
+.lstate{font-size:10px;font-family:'DM Mono',monospace;letter-spacing:.5px;transition:color .3s;color:var(--text3)}
+.lcard.ag .lname,.lcard.ag .lstate{color:var(--green)}
+.lcard.ay .lname,.lcard.ay .lstate{color:var(--yellow)}
+/* CONTROLS */
+.cgrid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:640px){.cgrid{grid-template-columns:1fr}.lanes{grid-template-columns:repeat(2,1fr)}}
+.ccard{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px;box-shadow:var(--sh)}
+.ctitle{font-size:11px;font-family:'DM Mono',monospace;color:var(--text3);letter-spacing:1px;text-transform:uppercase;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+.ctitle::before{content:'';width:5px;height:5px;border-radius:50%;background:var(--green);border-radius:50%}
+.bgrp{display:flex;flex-direction:column;gap:8px}
+.brow{display:flex;gap:8px}
+.btn{flex:1;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--text2);font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;padding:11px 14px;cursor:pointer;transition:all .18s;display:flex;align-items:center;justify-content:center;gap:7px;user-select:none}
+.btn.dis{opacity:.25;cursor:not-allowed;pointer-events:none}
+.btn:not(.dis):hover{box-shadow:var(--sh2);transform:translateY(-1px)}
+.btn:not(.dis):active{transform:translateY(0)}
+.btn.g{color:var(--green);border-color:var(--green-m);background:var(--green-l)}
+.btn.y{color:var(--yellow);border-color:var(--yellow-m);background:var(--yellow-l)}
+.btn.r{color:var(--red);border-color:var(--red-m);background:var(--red-l)}
+.btn.act.g{background:var(--green);color:#fff;border-color:var(--green);box-shadow:0 4px 12px rgba(4,120,87,.25)}
+.btn.act.y{background:var(--yellow);color:#fff;border-color:var(--yellow);box-shadow:0 4px 12px rgba(180,83,9,.25)}
+.btn.act.r{background:var(--red);color:#fff;border-color:var(--red);box-shadow:0 4px 12px rgba(220,38,38,.25)}
+.btn.lane{flex-direction:column;gap:2px;padding:14px 10px;background:var(--surface2)}
+.btn.lane .ll{font-size:20px;font-weight:700;transition:color .18s}
+.btn.lane .ls{font-size:9px;font-family:'DM Mono',monospace;color:var(--text3);letter-spacing:1px}
+.btn.lane:not(.dis):hover .ll{color:var(--green)}
+.btn.lane.act{background:var(--green-l);border-color:var(--green-m)}
+.btn.lane.act .ll,.btn.lane.act .ls{color:var(--green)}
+.lgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.sep{height:1px;background:var(--border);margin:4px 0}
+.fw{width:100%}
+/* TOAST */
+.toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(12px);background:#1e293b;color:#f8fafc;padding:10px 20px;border-radius:10px;font-size:12px;font-family:'DM Mono',monospace;opacity:0;transition:all .25s;pointer-events:none;z-index:200;white-space:nowrap}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.ok{background:var(--green)}
+.toast.err{background:var(--red)}
+.toast.inf{background:var(--yellow);color:#1e293b}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <!-- HEADER -->
+  <div class="hdr">
+    <div class="brand">
+      <div class="tl-mini">
+        <div class="td" id="td-r"></div>
+        <div class="td" id="td-y"></div>
+        <div class="td" id="td-g"></div>
+      </div>
+      <div>
+        <h1>Traffic Control</h1>
+        <p>Smart Intersection System</p>
+      </div>
+    </div>
+    <div class="conn">
+      <div class="cdot" id="cdot"></div>
+      <span id="clbl">Connecting…</span>
+      <span id="ctime" style="margin-left:8px">--:--:--</span>
+    </div>
+  </div>
+
+  <!-- POWER -->
+  <div class="pcard">
+    <div class="picon">⚡</div>
+    <div class="pinfo">
+      <h3>System Power</h3>
+      <p id="pinfo">System is currently offline</p>
+    </div>
+    <label class="tog">
+      <input type="checkbox" id="ptog" onchange="onPower()">
+      <div class="tog-track"></div>
+    </label>
+    <span class="pbadge" id="pbadge">OFF</span>
+  </div>
+
+  <!-- STATUS -->
+  <div class="srow">
+    <div class="sbadge" id="mbadge">
+      <div class="sbadge-dot"></div>
+      <div>
+        <div class="sbadge-lbl">Active Mode</div>
+        <div class="sbadge-val" id="mval">Standby</div>
+      </div>
+    </div>
+    <div class="sbadge">
+      <div class="sbadge-dot" style="background:var(--text3)"></div>
+      <div>
+        <div class="sbadge-lbl">Last Updated</div>
+        <div class="sbadge-val" id="ctime2" style="font-family:'DM Mono',monospace">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LANE DISPLAY -->
+  <div class="lanes">
+    <div class="lcard" id="card-0"><div class="ltitle">LANE A</div><div class="lhouse"><div class="bulb rd" id="L0r"></div><div class="bulb yd" id="L0y"></div><div class="bulb gd" id="L0g"></div></div><div class="lname" id="L0n">A</div><div class="lstate" id="L0s">—</div></div>
+    <div class="lcard" id="card-1"><div class="ltitle">LANE B</div><div class="lhouse"><div class="bulb rd" id="L1r"></div><div class="bulb yd" id="L1y"></div><div class="bulb gd" id="L1g"></div></div><div class="lname" id="L1n">B</div><div class="lstate" id="L1s">—</div></div>
+    <div class="lcard" id="card-2"><div class="ltitle">LANE C</div><div class="lhouse"><div class="bulb rd" id="L2r"></div><div class="bulb yd" id="L2y"></div><div class="bulb gd" id="L2g"></div></div><div class="lname" id="L2n">C</div><div class="lstate" id="L2s">—</div></div>
+    <div class="lcard" id="card-3"><div class="ltitle">LANE D</div><div class="lhouse"><div class="bulb rd" id="L3r"></div><div class="bulb yd" id="L3y"></div><div class="bulb gd" id="L3g"></div></div><div class="lname" id="L3n">D</div><div class="lstate" id="L3s">—</div></div>
+  </div>
+
+  <!-- CONTROLS -->
+  <div class="cgrid">
+    <div class="ccard">
+      <div class="ctitle">Auto Mode</div>
+      <div class="bgrp">
+        <button class="btn g dis" id="btn-0" onclick="doCmd('AUTO_NORMAL',0,1)">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Auto Normal
+        </button>
+        <div class="brow">
+          <button class="btn g dis" id="btn-6" onclick="doCmd('AUTO_PAIR',6,2)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg>Auto Pair
+          </button>
+          <button class="btn y dis" id="btn-5" onclick="doCmd('SMART_CITY',5,3)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Smart City
+          </button>
+        </div>
+        <div class="sep"></div>
+        <button class="btn r dis fw" id="btn-1" onclick="doCmd('STOP',1,5)">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>Stop All
+        </button>
+      </div>
+    </div>
+    <div class="ccard">
+      <div class="ctitle">Manual Mode</div>
+      <div class="bgrp">
+        <button class="btn y dis fw" id="btn-2" onclick="doEnterManual()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>Enter Manual Mode
+        </button>
+        <div class="lgrid">
+          <button class="btn lane dis" id="btn-7"  onclick="doLane(7,0)"><span class="ll">A</span><span class="ls">LANE A</span></button>
+          <button class="btn lane dis" id="btn-8"  onclick="doLane(8,1)"><span class="ll">B</span><span class="ls">LANE B</span></button>
+          <button class="btn lane dis" id="btn-9"  onclick="doLane(9,2)"><span class="ll">C</span><span class="ls">LANE C</span></button>
+          <button class="btn lane dis" id="btn-10" onclick="doLane(10,3)"><span class="ll">D</span><span class="ls">LANE D</span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════════════════
+//  BLYNK CONFIG
+// ══════════════════════════════════════════════════════
+const AUTH = 'wBiUxPk7c0sMy_jqPH6BBOw-RG4TiNhp';
+const BASE  = 'https://blynk.cloud/external/api';
+async function bSet(pin,val){try{await fetch(`${BASE}/update?token=${AUTH}&v${pin}=${val}`);}catch(_){}}
+async function bGet(pin){try{const r=await fetch(`${BASE}/get?token=${AUTH}&v${pin}`);if(!r.ok)return null;const d=await r.json();return Array.isArray(d)?d[0]:d;}catch(_){return null;}}
+
+// ══════════════════════════════════════════════════════
+//  MEGA CONSTANTS  (ตรงกับ 00.ino ทุกตัว)
+// ══════════════════════════════════════════════════════
+const T_GREEN  = 5000;   // ms
+const T_YELLOW = 3000;
+const T_GDELAY = 2000;
+const T_RED    = 30000;
+const T_CYCLE  = 40000;
+const OFFSET   = [0, 10000, 20000, 30000];  // ms
+
+const AP_AC_GREEN = 10000;
+const AP_YELLOW   = 3000;
+const AP_GDELAY   = 2000;
+const AP_BD_GREEN = 5000;
+
+const SC_SENSOR_WAIT = 5000;  // Smart City: รอ 5วิก่อน sensor
+const SC_SENSOR_HOLD = 3000;  // ตรวจจับต่อเนื่อง 3วิ
+
+// ══════════════════════════════════════════════════════
+//  SIM STATE  — จำลองตัวแปรใน Mega
+// ══════════════════════════════════════════════════════
+let sysOn   = false;
+let manOn   = false;
+let curMode = 0;   // 0=OFF 1=AUTO_NORMAL 2=AUTO_PAIR 3=SMART_CITY 4=MANUAL 5=STOP
+
+// AUTO_NORMAL
+let masterStart = 0;
+
+// AUTO_PAIR
+let pairState  = 0;
+let pairMillis = 0;
+
+// SMART_CITY
+let scState      = 0;   // 0=mainActive 1=ACyellow 2=allRed 3=BDgreen 4=BDyellow 5=allRed2
+let scPrev       = 0;
+let scMainActive = true;
+let scSensorStart = 0;
+let scSensorCounting = false;
+
+// MANUAL
+let manCurLane  = 0;
+let manTarget   = -1;
+let manInTrans  = false;
+let manState    = 0;
+let manPrev     = 0;
+
+// ไฟสถานะ 4 เลน: 0=Red 1=Yellow 2=Green
+let lights = [0, 0, 0, 0];
+
+// ── INIT 3วิ delay ──
+let initTimer   = 0;
+let initPending = null;   // callback หลัง allRed 3วิ
+
+// ══════════════════════════════════════════════════════
+//  RENDER  — อัปเดต UI ตาม lights[]
+// ══════════════════════════════════════════════════════
+const LNAMES = ['A','B','C','D'];
+
+function renderAll() {
+  for (let i = 0; i < 4; i++) renderLane(i);
+}
+
+function renderLane(i) {
+  const s    = lights[i];
+  const card = document.getElementById('card-'+i);
+  const R    = document.getElementById('L'+i+'r');
+  const Y    = document.getElementById('L'+i+'y');
+  const G    = document.getElementById('L'+i+'g');
+  const S    = document.getElementById('L'+i+'s');
+  if (!card||!R||!Y||!G||!S) return;
+
+  R.className = 'bulb rd'; Y.className = 'bulb yd'; G.className = 'bulb gd';
+  card.className = 'lcard';
+  S.style.color = '';
+
+  if (s === 2) {
+    G.className = 'bulb gon'; S.textContent = 'GREEN'; S.style.color='var(--green)'; card.className='lcard ag';
+  } else if (s === 1) {
+    Y.className = 'bulb yon'; S.textContent = 'YELLOW'; S.style.color='var(--yellow)'; card.className='lcard ay';
+  } else if (s === 0) {
+    R.className = 'bulb ron'; S.textContent = 'RED'; S.style.color='var(--red)';
+  } else {
+    S.textContent = '—';
+  }
+}
+
+function dimAll() {
+  for (let i=0;i<4;i++) {
+    document.getElementById('card-'+i).className='lcard';
+    document.getElementById('L'+i+'r').className='bulb rd';
+    document.getElementById('L'+i+'y').className='bulb yd';
+    document.getElementById('L'+i+'g').className='bulb gd';
+    document.getElementById('L'+i+'s').textContent='—';
+    document.getElementById('L'+i+'s').style.color='';
+  }
+}
+
+// ══════════════════════════════════════════════════════
+//  HELPER: set lights[]
+// ══════════════════════════════════════════════════════
+function allRed()  { lights = [0,0,0,0]; }
+function setLights(a,b,c,d) { lights=[a,b,c,d]; }
+
+// ══════════════════════════════════════════════════════
+//  AUTO NORMAL  — ตรงกับ getLaneState() ใน Mega
+// ══════════════════════════════════════════════════════
+function getLaneState(lane, now) {
+  const elapsed = now - masterStart;
+  const t       = elapsed % T_CYCLE;
+  const tLocal  = ((t - OFFSET[lane]) % T_CYCLE + T_CYCLE) % T_CYCLE;
+  if (tLocal < T_GREEN)  return 2;  // Green
+  if (tLocal < T_GREEN + T_YELLOW) return 1;  // Yellow
+  if (tLocal < T_GREEN + T_YELLOW + T_GDELAY) return 0;  // allRed (gDelay)
+  return 0;  // Red
+}
+
+function tickAutoNormal(now) {
+  for (let i=0;i<4;i++) lights[i] = getLaneState(i, now);
+}
+
+// ══════════════════════════════════════════════════════
+//  AUTO PAIR  — ตรงกับ updatePair() ใน Mega
+// ══════════════════════════════════════════════════════
+function tickAutoPair(now) {
+  const el = now - pairMillis;
+  switch(pairState) {
+    case 0: // AC green 10s
+      setLights(2,0,2,0);
+      if (el >= AP_AC_GREEN) { pairState=1; pairMillis=now; }
+      break;
+    case 1: // AC yellow 3s
+      setLights(1,0,1,0);
+      if (el >= AP_YELLOW) { pairState=2; pairMillis=now; }
+      break;
+    case 2: // all red 2s
+      allRed();
+      if (el >= AP_GDELAY) { pairState=3; pairMillis=now; }
+      break;
+    case 3: // BD green 5s
+      setLights(0,2,0,2);
+      if (el >= AP_BD_GREEN) { pairState=4; pairMillis=now; }
+      break;
+    case 4: // BD yellow 3s
+      setLights(0,1,0,1);
+      if (el >= AP_YELLOW) { pairState=5; pairMillis=now; }
+      break;
+    case 5: // all red 2s → loop
+      allRed();
+      if (el >= AP_GDELAY) { pairState=0; pairMillis=now; }
+      break;
+  }
+}
+
+// ══════════════════════════════════════════════════════
+//  SMART CITY  — ตรงกับ Smart City logic ใน Mega
+//  mainActive: AC green, รอ sensor
+//  state 1: AC yellow 3s
+//  state 2: allRed 2s
+//  state 3: BD green 5s
+//  state 4: BD yellow 3s
+//  state 5: allRed 2s → mainActive
+// ══════════════════════════════════════════════════════
+function tickSmartCity(now) {
+  const el = now - scPrev;
+  if (scMainActive) {
+    setLights(2,0,2,0);
+    // จำลอง sensor: ไม่มี sensor จริง ใช้ timer 8วิแทน (5วิรอ + 3วิ trigger)
+    if (now - scPrev >= SC_SENSOR_WAIT + SC_SENSOR_HOLD) {
+      scMainActive = false;
+      setLights(1,0,1,0);
+      scState = 1; scPrev = now;
+    }
+  } else {
+    switch(scState) {
+      case 1: setLights(1,0,1,0); if(el>=T_YELLOW){allRed();scState=2;scPrev=now;} break;
+      case 2: allRed(); if(el>=T_GDELAY){setLights(0,2,0,2);scState=3;scPrev=now;} break;
+      case 3: setLights(0,2,0,2); if(el>=T_GREEN){setLights(0,1,0,1);scState=4;scPrev=now;} break;
+      case 4: setLights(0,1,0,1); if(el>=T_YELLOW){allRed();scState=5;scPrev=now;} break;
+      case 5: allRed(); if(el>=T_GDELAY){scMainActive=true;setLights(2,0,2,0);scPrev=now;} break;
+    }
+  }
+}
+
+// ══════════════════════════════════════════════════════
+//  MANUAL  — ตรงกับ MODE_CONTROL ใน Mega
+// ══════════════════════════════════════════════════════
+function startManual() {
+  manCurLane = 0; manTarget = -1; manInTrans = false;
+  lights = [0,0,0,0];
+  lights[0] = 2;   // Lane A เขียวก่อน
+  manState = 0; manPrev = Date.now();
+}
+
+function requestLane(lane) {
+  if (manInTrans || lane === manCurLane) return;
+  manTarget = lane;
+  manInTrans = true;
+  lights[manCurLane] = 1;  // เหลือง
+  manState = 1; manPrev = Date.now();
+}
+
+function tickManual(now) {
+  if (!manInTrans) return;
+  const el = now - manPrev;
+  if (manState === 1 && el >= T_YELLOW) {
+    allRed(); manState = 2; manPrev = now;
+  } else if (manState === 2 && el >= T_GDELAY) {
+    allRed();
+    lights[manTarget] = 2;
+    manCurLane = manTarget; manTarget = -1;
+    manInTrans = false; manState = 0;
+  }
+}
+
+// ══════════════════════════════════════════════════════
+//  INIT SEQUENCE  — allRed 3วิ ก่อนเริ่ม mode
+// ══════════════════════════════════════════════════════
+function startWithDelay(callback) {
+  allRed(); renderAll();
+  initTimer = Date.now();
+  initPending = callback;
+}
+
+// ══════════════════════════════════════════════════════
+//  MAIN TICK  — วิ่งทุก 100ms
+// ══════════════════════════════════════════════════════
+function tick() {
+  if (!sysOn) return;
+  const now = Date.now();
+
+  // init delay 3วิ
+  if (initPending) {
+    if (now - initTimer >= 3000) {
+      const fn = initPending; initPending = null;
+      fn(now);
+    } else {
+      allRed(); renderAll(); return;
+    }
+  }
+
+  switch(curMode) {
+    case 1: tickAutoNormal(now); break;
+    case 2: tickAutoPair(now);   break;
+    case 3: tickSmartCity(now);  break;
+    case 4: tickManual(now);     break;
+    default: return;
+  }
+  renderAll();
+}
+
+// ══════════════════════════════════════════════════════
+//  UI HELPERS
+// ══════════════════════════════════════════════════════
+const MODES = {
+  0:{lbl:'Standby',    col:'',  btn:null},
+  1:{lbl:'Auto Normal',col:'g', btn:'btn-0'},
+  2:{lbl:'Auto Pair',  col:'g', btn:'btn-6'},
+  3:{lbl:'Smart City', col:'y', btn:'btn-5'},
+  4:{lbl:'Manual Mode',col:'y', btn:'btn-2'},
+  5:{lbl:'Stopped',    col:'r', btn:'btn-1'},
+};
+
+function setModeBadge(m) {
+  const info = MODES[m] || MODES[0];
+  document.getElementById('mbadge').className = 'sbadge'+(info.col?' c'+info.col:'');
+  document.getElementById('mval').textContent = info.lbl;
+  document.querySelectorAll('.act').forEach(e=>e.classList.remove('act'));
+  if(info.btn) document.getElementById(info.btn)?.classList.add('act');
+}
+
+function setDis(ids, disabled) {
+  ids.forEach(id=>{
+    const el=document.getElementById(id);
+    if(!el) return;
+    disabled ? el.classList.add('dis') : el.classList.remove('dis');
+  });
+}
+
+function refreshButtons() {
+  setDis(['btn-0','btn-6','btn-5','btn-1','btn-2'], !sysOn);
+  setDis(['btn-7','btn-8','btn-9','btn-10'], !(sysOn && manOn));
+}
+
+function setConn(on){
+  document.getElementById('cdot').className='cdot'+(on?' on':'');
+  const l=document.getElementById('clbl');
+  l.textContent=on?'Online':'Offline'; l.style.color=on?'var(--green)':'var(--red)';
+}
+
+function setPowerUI(on){
+  document.getElementById('ptog').checked=on;
+  document.getElementById('pbadge').textContent=on?'ON':'OFF';
+  document.getElementById('pbadge').className='pbadge'+(on?' on':'');
+  document.getElementById('pinfo').textContent=on?'System is running':'System is currently offline';
+}
+
+function hdrAnim(on){
+  ['td-r','td-y','td-g'].forEach(i=>document.getElementById(i).className='td');
+  if(on){
+    setTimeout(()=>document.getElementById('td-r').className='td r',0);
+    setTimeout(()=>{document.getElementById('td-r').className='td';document.getElementById('td-y').className='td y';},600);
+    setTimeout(()=>{document.getElementById('td-y').className='td';document.getElementById('td-g').className='td g';},1200);
+  }
+}
+
+let tTimer;
+function toast(msg,type=''){
+  const e=document.getElementById('toast');
+  e.textContent=msg; e.className='toast show'+(type?' '+type:'');
+  clearTimeout(tTimer); tTimer=setTimeout(()=>e.classList.remove('show'),2500);
+}
+
+// ══════════════════════════════════════════════════════
+//  ACTIONS
+// ══════════════════════════════════════════════════════
+function onPower(){
+  const next = document.getElementById('ptog').checked;
+  sysOn = next; manOn = false; curMode = 0; initPending = null;
+  setPowerUI(next);
+  setModeBadge(0);
+  refreshButtons();
+  hdrAnim(next);
+  if (!next) { dimAll(); } else { allRed(); renderAll(); }
+  toast(next?'System ON':'System OFF', next?'ok':'inf');
+  bSet(4, next?1:0);
+}
+
+function doCmd(name, pin, modeNum) {
+  if (!sysOn) return;
+  if (curMode === modeNum) return;  // กด mode เดิม → ไม่ทำอะไร
+  manOn = false; curMode = modeNum;
+  setModeBadge(modeNum);
+  refreshButtons();
+  toast(name.replace(/_/g,' '), 'ok');
+  bSet(pin,1); setTimeout(()=>bSet(pin,0),300);
+
+  startWithDelay((now) => {
+    if (modeNum === 1) { masterStart = now; }
+    if (modeNum === 2) { pairState=0; pairMillis=now; setLights(2,0,2,0); }
+    if (modeNum === 3) { scMainActive=true; scPrev=now; setLights(2,0,2,0); }
+    if (modeNum === 5) { allRed(); }
+  });
+}
+
+function doEnterManual(){
+  if (!sysOn) return;
+  if (curMode === 4 && manOn) return;  // อยู่ใน Manual แล้ว → ไม่ทำอะไร
+  manOn = true; curMode = 4;
+  setModeBadge(4);
+  refreshButtons();
+  toast('Manual Mode — Select a lane', 'ok');
+  bSet(2,1); setTimeout(()=>bSet(2,0),300);
+  startWithDelay((now) => { startManual(); });
+}
+
+function doLane(pin, laneIdx){
+  if (!sysOn || !manOn) return;
+  if (manCurLane === laneIdx && !manInTrans) return;  // เลนเดิมที่เขียวอยู่แล้ว → ไม่ทำอะไร
+  // highlight ปุ่ม
+  document.querySelectorAll('.act').forEach(e=>e.classList.remove('act'));
+  document.getElementById('btn-2')?.classList.add('act');
+  document.getElementById('btn-'+pin)?.classList.add('act');
+  toast('Lane '+LNAMES[laneIdx]+' activated','ok');
+  bSet(pin,1); setTimeout(()=>bSet(pin,0),300);
+  requestLane(laneIdx);
+}
+
+// ══════════════════════════════════════════════════════
+//  SYNC Blynk (V4, V11 เท่านั้น — ไม่ใช้ V12)
+// ══════════════════════════════════════════════════════
+let syncing = false, lastV4=null, lastV11=null;
+
+async function sync(){
+  if(syncing) return; syncing=true;
+  try{
+    const [r4,r11] = await Promise.all([bGet(4),bGet(11)]);
+    if(r4===null){setConn(false);return;}
+    setConn(true);
+    const t=new Date().toLocaleTimeString('th-TH');
+    document.getElementById('ctime').textContent=t;
+    document.getElementById('ctime2').textContent=t;
+
+    // power
+    const serverOn=(r4==='1'||r4===1);
+    if(serverOn!==sysOn && r4!==lastV4){
+      lastV4=r4;
+      sysOn=serverOn;
+      if(!sysOn){manOn=false;curMode=0;initPending=null;dimAll();}
+      setPowerUI(sysOn); setModeBadge(sysOn?curMode:0); refreshButtons(); hdrAnim(sysOn);
+    }
+
+    // mode — ถ้า server เปลี่ยน mode จาก Blynk app อื่น ให้ sync ด้วย
+    const m=parseInt(r11??'0',10);
+    if(r11!==lastV11 && sysOn){
+      lastV11=r11;
+      if(m!==curMode){
+        // mode เปลี่ยนจากภายนอก → รีเซ็ต sim
+        const modeMap={1:'AUTO_NORMAL',2:'AUTO_PAIR',3:'SMART_CITY',4:'MANUAL',5:'STOP'};
+        if(m===4){doEnterManual_silent();}
+        else if(m>=1&&m<=5){doCmd_silent(m);}
+      }
+    }
+  }finally{syncing=false;}
+}
+
+// silent version (ไม่ส่ง Blynk กลับ ไม่ toast)
+function doCmd_silent(modeNum){
+  manOn=false; curMode=modeNum; setModeBadge(modeNum); refreshButtons();
+  startWithDelay((now)=>{
+    if(modeNum===1){masterStart=now;}
+    if(modeNum===2){pairState=0;pairMillis=now;setLights(2,0,2,0);}
+    if(modeNum===3){scMainActive=true;scPrev=now;setLights(2,0,2,0);}
+    if(modeNum===5){allRed();}
+  });
+}
+function doEnterManual_silent(){
+  manOn=true;curMode=4;setModeBadge(4);refreshButtons();
+  startWithDelay((now)=>{startManual();});
+}
+
+// ── START ──
+setInterval(tick, 100);   // จำลอง Mega ทุก 100ms
+sync();
+setInterval(sync, 1500);  // sync Blynk ทุก 1.5วิ
+</script>
+</body>
+</html>
