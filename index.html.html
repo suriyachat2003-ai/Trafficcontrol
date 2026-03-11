@@ -39,7 +39,6 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 .pinfo{flex:1}.pinfo h3{font-size:14px;font-weight:600}
 .pinfo p{font-size:12px;color:var(--text3);font-family:'DM Mono',monospace;margin-top:2px}
 .tog{position:relative;width:52px;height:28px;flex-shrink:0;cursor:pointer}
-.tog.dis{opacity:.35;cursor:not-allowed;pointer-events:none}
 .tog input{opacity:0;width:0;height:0;position:absolute}
 .tog-track{position:absolute;inset:0;border-radius:14px;background:#cbd5e1;transition:background .25s}
 .tog-track::after{content:'';position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;transition:transform .25s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
@@ -219,9 +218,6 @@ const AUTH = 'wBiUxPk7c0sMy_jqPH6BBOw-RG4TiNhp';
 const BASE  = 'https://blynk.cloud/external/api';
 async function bSet(pin,val){try{await fetch(`${BASE}/update?token=${AUTH}&v${pin}=${val}`);}catch(_){}}
 async function bGet(pin){try{const r=await fetch(`${BASE}/get?token=${AUTH}&v${pin}`);if(!r.ok)return null;const d=await r.json();return Array.isArray(d)?d[0]:d;}catch(_){return null;}}
-// bGetStr — สำหรับ pin ที่ค่าเป็น string เช่น V12 "2,0,2,0"
-// Blynk ส่ง array กลับมา → join ทั้งหมดไม่ใช่แค่ d[0]
-async function bGetStr(pin){try{const r=await fetch(`${BASE}/get?token=${AUTH}&v${pin}`);if(!r.ok)return null;const d=await r.json();return Array.isArray(d)?d.join(','):String(d);}catch(_){return null;}}
 async function bIsConnected(){try{const r=await fetch(`${BASE}/isHardwareConnected?token=${AUTH}`);if(!r.ok)return false;const d=await r.json();return d===true||d==='true';}catch(_){return false;}}
 
 // ══════════════════════════════════════════════════════
@@ -467,7 +463,7 @@ function tick() {
   switch(curMode) {
     case 1: tickAutoNormal(now); break;
     case 2: tickAutoPair(now);   break;
-    case 3: return; // Smart City — ใช้ V12 จาก Mega แทน simulation
+    case 3: tickSmartCity(now);  break;
     case 4: tickManual(now);     break;
     default: return;
   }
@@ -503,22 +499,14 @@ function setDis(ids, disabled) {
 }
 
 function refreshButtons() {
-  setDis(['btn-0','btn-6','btn-5','btn-1','btn-2'], !sysOn || !hwOnline);
-  setDis(['btn-7','btn-8','btn-9','btn-10'], !(sysOn && manOn) || !hwOnline);
+  setDis(['btn-0','btn-6','btn-5','btn-1','btn-2'], !sysOn);
+  setDis(['btn-7','btn-8','btn-9','btn-10'], !(sysOn && manOn));
 }
 
-let hwOnline = false;
-
 function setConn(on){
-  hwOnline = on;
   document.getElementById('cdot').className='cdot'+(on?' on':'');
   const l=document.getElementById('clbl');
   l.textContent=on?'Online':'Offline'; l.style.color=on?'var(--green)':'var(--red)';
-  // Power toggle
-  const tog=document.getElementById('ptog').parentElement;
-  on ? tog.classList.remove('dis') : tog.classList.add('dis');
-  // ปุ่มทั้งหมด — re-evaluate ตาม state ปัจจุบัน
-  refreshButtons();
 }
 
 function setPowerUI(on){
@@ -600,9 +588,9 @@ function doLane(pin, laneIdx){
 }
 
 // ══════════════════════════════════════════════════════
-//  SYNC Blynk (V4, V11) — multi-device realtime
+//  SYNC Blynk (V4, V11 เท่านั้น — ไม่ใช้ V12)
 // ══════════════════════════════════════════════════════
-let syncing = false;
+let syncing = false, lastV4=null, lastV11=null;
 
 async function sync(){
   if(syncing) return; syncing=true;
@@ -614,96 +602,48 @@ async function sync(){
     document.getElementById('ctime').textContent=t;
     document.getElementById('ctime2').textContent=t;
 
-    // ── Power ──
+    // power
     const serverOn=(r4==='1'||r4===1);
-    if(serverOn !== sysOn){
-      sysOn = serverOn;
-      if(!sysOn){ manOn=false; curMode=0; initPending=null; dimAll(); }
-      setPowerUI(sysOn);
-      refreshButtons();
-      hdrAnim(sysOn);
-      // ถ้าเพิ่ง power on อย่าเพิ่ง setModeBadge ให้รอ mode จาก V11 ด้านล่าง
+    if(serverOn!==sysOn && r4!==lastV4){
+      lastV4=r4;
+      sysOn=serverOn;
+      if(!sysOn){manOn=false;curMode=0;initPending=null;dimAll();}
+      setPowerUI(sysOn); setModeBadge(sysOn?curMode:0); refreshButtons(); hdrAnim(sysOn);
     }
 
-    // ── Mode (V11) ──
-    const m = parseInt(r11??'0', 10);
-    if(sysOn){
-      if(m !== curMode){
-        // mode เปลี่ยนจากเครื่องอื่น → sync ตาม
-        if(m===4){ doEnterManual_silent(); }
-        else if(m>=1 && m<=5){ doCmd_silent(m); }
-        else { manOn=false; curMode=0; setModeBadge(0); refreshButtons(); }
-      } else {
-        // mode เดิม แต่ badge อาจยังไม่ถูก (เช่น เพิ่ง refresh หน้า)
-        setModeBadge(curMode);
+    // mode — ถ้า server เปลี่ยน mode จาก Blynk app อื่น ให้ sync ด้วย
+    const m=parseInt(r11??'0',10);
+    if(r11!==lastV11 && sysOn){
+      lastV11=r11;
+      if(m!==curMode){
+        // mode เปลี่ยนจากภายนอก → รีเซ็ต sim
+        const modeMap={1:'AUTO_NORMAL',2:'AUTO_PAIR',3:'SMART_CITY',4:'MANUAL',5:'STOP'};
+        if(m===4){doEnterManual_silent();}
+        else if(m>=1&&m<=5){doCmd_silent(m);}
       }
-    } else {
-      setModeBadge(0);
     }
-
   }finally{syncing=false;}
-}
-
-// ══════════════════════════════════════════════════════
-//  V12 POLL — อ่านสถานะไฟจริงจาก Mega เฉพาะ Smart City
-//  แยกจาก sync() เพื่อ poll ถี่ขึ้นโดยไม่กระทบ rate limit pin อื่น
-// ══════════════════════════════════════════════════════
-let v12polling = false;
-async function pollV12(){
-  if(curMode!==3 || !sysOn) return;
-  if(v12polling) return; v12polling=true;
-  try{
-    const raw = await fetch(`${BASE}/get?token=${AUTH}&v12`);
-    if(!raw.ok) return;
-    const d = await raw.json();
-    console.log('[V12 raw]', JSON.stringify(d));
-    // Blynk อาจส่งกลับหลายรูปแบบ:
-    // ["2,0,2,0"]  → string เดียวใน array
-    // ["2","0","2","0"] → array 4 ตัว
-    // "2,0,2,0"   → string ตรงๆ
-    let str = '';
-    if(Array.isArray(d)){
-      str = d.length===4 ? d.join(',') : d[0];
-    } else {
-      str = String(d);
-    }
-    console.log('[V12 str]', str);
-    const parts = str.split(',').map(v=>parseInt(v.trim(),10));
-    console.log('[V12 parts]', parts);
-    if(parts.length===4 && parts.every(v=>!isNaN(v))){
-      lights = parts;
-      renderAll();
-    }
-  }catch(e){console.error('[V12 err]',e);}
-  finally{v12polling=false;}
 }
 
 // silent version (ไม่ส่ง Blynk กลับ ไม่ toast)
 function doCmd_silent(modeNum){
-  const alreadyActive = (curMode===modeNum && manOn===false);
-  manOn=false; curMode=modeNum;
-  setModeBadge(modeNum); refreshButtons();
-  if(alreadyActive) return; // mode เดิม ไม่ reset simulation
+  manOn=false; curMode=modeNum; setModeBadge(modeNum); refreshButtons();
   startWithDelay((now)=>{
     if(modeNum===1){masterStart=now;}
     if(modeNum===2){pairState=0;pairMillis=now;setLights(2,0,2,0);}
-    if(modeNum===3){scMainActive=true;scPrev=now;}
+    if(modeNum===3){scMainActive=true;scPrev=now;setLights(2,0,2,0);}
     if(modeNum===5){allRed();}
   });
 }
 function doEnterManual_silent(){
-  const alreadyActive = (curMode===4 && manOn);
-  manOn=true; curMode=4;
-  setModeBadge(4); refreshButtons();
-  if(alreadyActive) return;
+  manOn=true;curMode=4;setModeBadge(4);refreshButtons();
   startWithDelay((now)=>{startManual();});
 }
 
 // ── START ──
-setInterval(tick, 100);
+setInterval(tick, 100);   // จำลอง Mega ทุก 100ms
 sync();
-setInterval(()=>{ sync(); }, 1000);    // sync V4/V11 ทุก 1วิ
-setInterval(()=>{ pollV12(); }, 1100); // poll V12 สถานะไฟ Smart City ทุก 1.1วิ
+setInterval(sync, 1500);  // sync Blynk ทุก 1.5วิ
 </script>
 </body>
 </html>
